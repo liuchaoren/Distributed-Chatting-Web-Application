@@ -12,6 +12,7 @@ import scala.collection.mutable.Map
 class BoardActor extends Actor with ActorLogging {
   var users = Set[ActorRef]()
   var usersid = Set[String]()
+  var userIDmap = Map[ActorRef, String]()
 
   def receive = LoggingReceive {
 //    case m:Message => users map { _ ! m}
@@ -19,11 +20,13 @@ class BoardActor extends Actor with ActorLogging {
 //      users map {_ ! newUser(sender,s.userID)}
       users += sender
       usersid += s.userID
+      userIDmap += (sender -> s.userID)
       context watch sender
 
     }
     case AcquireUsers => sender ! users
     case AcquireUsersID => sender ! usersid
+    case AcquireUserIDMap => sender ! userIDmap
     case Terminated(user) => users -= user
   }
 }
@@ -38,4 +41,5 @@ case class MessageToMyself(uuid:String, s:String)
 case class Subscribe(userID:String)
 object AcquireUsers
 object AcquireUsersID
+object AcquireUserIDMap
 case class newUser(user:ActorRef, id:String)
