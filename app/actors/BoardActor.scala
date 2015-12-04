@@ -15,9 +15,7 @@ class BoardActor extends Actor with ActorLogging {
   var userIDmap = Map[ActorRef, String]()
 
   def receive = LoggingReceive {
-//    case m:Message => users map { _ ! m}
     case s:Subscribe => {
-//      users map {_ ! newUser(sender,s.userID)}
       users += sender
       usersid += s.userID
       userIDmap += (sender -> s.userID)

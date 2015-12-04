@@ -29,20 +29,22 @@ class UserActor(uid: String, board:ActorRef, out:ActorRef) extends Actor with Ac
 
   override def preStart() = {
     BoardActor() ! Subscribe(uid)
+    // ask BoardActor about the users set
     val future = ask(BoardActor(), AcquireUsers).mapTo[Set[ActorRef]]
     val users = Await.result(future, timeout.duration)
-    userspool = users
+    userspool = users // set of users' ActorRef
     val future1 = ask(BoardActor(), AcquireUsersID).mapTo[Set[String]]
-    val usersID = Await.result(future1, timeout.duration)
+    val usersID = Await.result(future1, timeout.duration) // set of users' id
+    // initialize the vector clock when joining in, clock of itself is 0 and clocks of others is infinity
     for (eachuser <- usersID)
-      if (eachuser != uid)
-        vectorC += (eachuser -> infinity)
+      vectorC += (eachuser -> infinity)
     vectorC.update(uid,0)
 
 
     val future2 = ask(BoardActor(), AcquireUserIDMap).mapTo[Map[ActorRef, String]]
-    userIDmap = Await.result(future2, timeout.duration)
+    userIDmap = Await.result(future2, timeout.duration) // userIDmap is the mapping between users' ActorRef and users' id
 
+    // tell every other users about new joined user
     for (user <- userspool)
       if (user != self)
         user ! newUser(self,uid)
@@ -50,6 +52,9 @@ class UserActor(uid: String, board:ActorRef, out:ActorRef) extends Actor with Ac
 
   }
 
+
+
+  // compare two given vector clocks, vc1 (sender) and vc2 (receiver). uid1 is sender id and uid2 is receiver id
   def biggerVC(vc1:Map[String, Int], vc2:Map[String, Int], uid1:String, uid2:String): Boolean = {
     for (eachkey <- vc1.keysIterator) {
       if (eachkey != uid1 && eachkey != uid2)
@@ -60,6 +65,8 @@ class UserActor(uid: String, board:ActorRef, out:ActorRef) extends Actor with Ac
     return false
   }
 
+
+  // if causal ordering is broken, buffer message and wait
   def buffer(m:Message): Unit = {
     if (messageBuffer.get(m.uuid).isDefined)
       messageBuffer.get(m.uuid).get += m
@@ -69,6 +76,9 @@ class UserActor(uid: String, board:ActorRef, out:ActorRef) extends Actor with Ac
     }
 
   }
+
+
+
 
   def createRunnable(u:ActorRef, m:JsResult[String], uid:String, vc:Map[String,Int]): Runnable = {
     val aRunnable = new Runnable {
@@ -80,24 +90,24 @@ class UserActor(uid: String, board:ActorRef, out:ActorRef) extends Actor with Ac
 
   }
 
+
+
   def deliverM(m:Message): Unit = {
     val js = Json.obj("type" -> "message", "uid" -> m.uuid, "msg" -> m.s)
     out ! js
-//    messageBuffer -= m
     vectorC.update(uid, vectorC.get(uid).get+1)
     vectorC.update(m.uuid, m.senderClock.get(m.uuid).get)
 
   }
 
-//    if (uid == "2"){
-//      print("My local vector is ", vectorC, "My buffer is", messageBuffer)
-//    }
 
+
+  // look up buffer, and deliver deliverable messages
   def cleanBuffer():Int = {
     for (eachsender <- messageBuffer.keysIterator) {
       val thisqueue = messageBuffer.get(eachsender).get
       if (thisqueue.nonEmpty) {
-        if (! biggerVC(thisqueue.front.senderClock, vectorC, uid, thisqueue.front.uuid)) {
+        if (! biggerVC(thisqueue.front.senderClock, vectorC, thisqueue.front.uuid, uid)) {
           deliverM(thisqueue.dequeue())
           return 1
         }
@@ -108,41 +118,37 @@ class UserActor(uid: String, board:ActorRef, out:ActorRef) extends Actor with Ac
   }
 
 
+
+
   def receive = LoggingReceive {
+    // message to other users
     case Message(muid, senderVC, s) => {
-//      print(uid, muid, vectorC)
-//      printf("%s get a message from %s\n", uid, muid)
-//      print(vectorC)
-//      print(userspool)
-//      val js = Json.obj("type" -> "message", "uid" -> muid, "msg" -> s)
-//      print(senderVC)
-      if (! biggerVC(senderVC, vectorC, uid, muid)) {
+      if (! biggerVC(senderVC, vectorC, muid, uid)) {
         deliverM(Message(muid, senderVC, s))
         var returnsatus=1
         while (returnsatus == 1)
           returnsatus = cleanBuffer()
       } else {
         buffer(Message(muid, senderVC, s))
-//        print(messageBuffer)
       }
-//      out ! js
     }
 
+
+
+    // message to user itself
     case MessageToMyself(muid, s)  => {
       val js = Json.obj("type" -> "message", "uid" -> muid, "msg" -> s)
       out ! js
 
     }
+
+
+    // receive message from client
     case js: JsValue => {
-//      printf("%s print vectorC:\n", uid)
-//      print(vectorC)
-//      print(userspool)
       val newClock:Int = vectorC.get(uid).get + 1
       vectorC.update(uid,newClock)
-
-
       val m = (js \ "msg").validate[String] map { Utility.escape(_) }
-//      print(m)
+//       test by intentionally slowing messages from user 1 to user 2
       for (u <- userspool) {
         if (u == self)
           m map (u ! MessageToMyself(uid, _))
@@ -157,56 +163,40 @@ class UserActor(uid: String, board:ActorRef, out:ActorRef) extends Actor with Ac
           }
       }
 
-
-//        if (u != self)
-//          m map (u ! Message(uid, vectorC, _ ))
-//        else
-//          m map (u ! MessageToMyself(uid, _))
-//        if (uid != "1") {
-//          if (u != self) {
-//            m map (u ! Message(uid, vectorC, _))
-//            if (uid == "3")
-//              print(uid, " local clock is", vectorC)
-//          }
-//          else {
-//            m map (u ! MessageToMyself(uid, _))
-//          }
-//
-//        }
-//        else {
-//          if (u == self)
-//            m map (u ! MessageToMyself(uid, _))
+//      for (u <- userspool) {
+//          if (u != self)
+//            m map (u ! Message(uid, vectorC.clone(), _ ))
 //          else
-//            if (userIDmap.get(u).get == "2") {
-//              val saveMyOldVector = vectorC.clone()
-//              Akka.system().scheduler.scheduleOnce(10 seconds, createRunnable(u, m, uid, saveMyOldVector))
-//            }
-//            else
-//              m map (u ! Message(uid, vectorC, _))
-//        }
-
+//            m map (u ! MessageToMyself(uid, _))
+//      }
     }
+
+
+
+
+    // new user join in
     case nu:newUser => {
       userspool += nu.user
       vectorC += (nu.id -> 0)
       userIDmap += (nu.user -> nu.id)
-//      sender ! myClock(uid, vectorC.get(uid).get) // tell my new user my current clock
 
     }
 
-//    case mc:myClock => {
-//      vectorC.update(mc.uid, mc.clock)
-//      for (eachm <- messageBuffer)
-//        if(! biggerVC(eachm.senderClock, vectorC, uid, eachm.uuid))
-//          deliverM(eachm)
-//    }
+
+
+
 
     case other => log.error("unhandled: " + other)
   }
 }
 
+
+
+
+
 object UserActor {
   def props(uid: String)(out: ActorRef) = Props(new UserActor(uid, BoardActor(), out))
 }
 
-case class myClock(uid:String, clock:Int)
+
+
