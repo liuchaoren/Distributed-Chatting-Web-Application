@@ -25,7 +25,7 @@ class UserActor(uid: String, board:ActorRef, out:ActorRef) extends Actor with Ac
   private var vectorC =  Map[String, Int]()
   private var messageBuffer = Map[String, Queue[Message]]()
   private var userIDmap = Map[ActorRef, String]()
-//  private val infinity:Int = 100000000
+  private val infinity:Int = 100000000
 
   override def preStart() = {
     BoardActor() ! Subscribe(uid)
@@ -35,7 +35,10 @@ class UserActor(uid: String, board:ActorRef, out:ActorRef) extends Actor with Ac
     val future1 = ask(BoardActor(), AcquireUsersID).mapTo[Set[String]]
     val usersID = Await.result(future1, timeout.duration)
     for (eachuser <- usersID)
-      vectorC += (eachuser -> 0)
+      if (eachuser != uid)
+        vectorC += (eachuser -> infinity)
+    vectorC.update(uid,0)
+
 
     val future2 = ask(BoardActor(), AcquireUserIDMap).mapTo[Map[ActorRef, String]]
     userIDmap = Await.result(future2, timeout.duration)
@@ -50,9 +53,9 @@ class UserActor(uid: String, board:ActorRef, out:ActorRef) extends Actor with Ac
   def biggerVC(vc1:Map[String, Int], vc2:Map[String, Int], uid1:String, uid2:String): Boolean = {
     for (eachkey <- vc1.keysIterator) {
       if (eachkey != uid1 && eachkey != uid2)
-//        if (vc1.get(eachkey).get != infinity && vc2.get(eachkey).get != infinity)
-        if (vc1.get(eachkey).get > vc2.get(eachkey).get)
-          return true
+        if (vc1.get(eachkey).get != infinity && vc2.get(eachkey).get != infinity)
+          if (vc1.get(eachkey).get > vc2.get(eachkey).get)
+            return true
     }
     return false
   }
