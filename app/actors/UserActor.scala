@@ -149,26 +149,26 @@ class UserActor(uid: String, board:ActorRef, out:ActorRef) extends Actor with Ac
       vectorC.update(uid,newClock)
       val m = (js \ "msg").validate[String] map { Utility.escape(_) }
 //       test by intentionally slowing messages from user 1 to user 2
-      for (u <- userspool) {
-        if (u == self)
-          m map (u ! MessageToMyself(uid, _))
-        else
-          if (uid == "1" && userIDmap.get(u).get == "2") {
-            val saveMyOldVector = vectorC.clone()
-            Akka.system().scheduler.scheduleOnce(10 seconds, createRunnable(u, m, uid, saveMyOldVector))
-          }
-          else {
-            print(uid, "is sending message of ", m map {Message(uid, vectorC.clone(), _)})
-            m map (u ! Message(uid, vectorC.clone(), _))
-          }
-      }
-
 //      for (u <- userspool) {
-//          if (u != self)
-//            m map (u ! Message(uid, vectorC.clone(), _ ))
-//          else
-//            m map (u ! MessageToMyself(uid, _))
+//        if (u == self)
+//          m map (u ! MessageToMyself(uid, _))
+//        else
+//          if (uid == "1" && userIDmap.get(u).get == "2") {
+//            val saveMyOldVector = vectorC.clone()
+//            Akka.system().scheduler.scheduleOnce(10 seconds, createRunnable(u, m, uid, saveMyOldVector))
+//          }
+//          else {
+//            print(uid, "is sending message of ", m map {Message(uid, vectorC.clone(), _)})
+//            m map (u ! Message(uid, vectorC.clone(), _))
+//          }
 //      }
+
+      for (u <- userspool) {
+          if (u != self)
+            m map (u ! Message(uid, vectorC.clone(), _ ))
+          else
+            m map (u ! MessageToMyself(uid, _))
+      }
     }
 
 
