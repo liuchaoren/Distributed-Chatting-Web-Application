@@ -1,5 +1,4 @@
-##anonymous_chat
+##distributed chatting web application
 ==============
-
-This is a barebone chat application (without nicknames) to illustrate the use of a websocket with Akka actors within a Play Framework appliction.
-
+A web application built in Play Framework.
+This web application is for chatting between users without a centralized master.
